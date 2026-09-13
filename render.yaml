@@ -1,0 +1,50 @@
+# Render Blueprint for the TasdikiDocs backend (server/).
+#
+# Secrets use `sync: false`: Render prompts for their values when the
+# Blueprint is first applied, and they are never stored in this file.
+services:
+  - type: web
+    name: tasdikidocs-server
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: server
+    # TypeScript is a devDependency; --include=dev keeps it installed even
+    # though NODE_ENV=production would otherwise make npm skip it.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SMTP_GMAIL_USER
+        sync: false
+      - key: SMTP_GMAIL_APP_PASSWORD
+        sync: false
+      - key: THIRDWEB_SECRET_KEY
+        sync: false
+      - key: THIRDWEB_CLIENT_ID
+        sync: false
+      - key: PLATFORM_WALLET_PRIVATE_KEY
+        sync: false
+      - key: POLYGON_AMOY_RPC_URL
+        sync: false
+      - key: POLYGON_AMOY_CHAIN_ID
+        sync: false
+      - key: CERTIFICATE_REGISTRY_ADDRESS
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: RATE_LIMIT_WINDOW_MS
+        sync: false
+      - key: RATE_LIMIT_MAX
+        sync: false
