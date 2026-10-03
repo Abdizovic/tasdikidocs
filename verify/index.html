@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verify a certificate | TasdikiDocs</title>
+<meta name="description" content="Check whether an academic certificate is genuine. No account needed.">
+<!-- A result URL carries someone's name and qualification, so these pages are
+     deliberately kept out of search engines even though anyone holding the
+     link may read them. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0f2d52">
+
+<!--
+  TasdikiDocs public certificate verification page.
+
+  This is where a certificate's QR code points. The person scanning it is
+  normally an employer, registrar or embassy clerk who will never install the
+  app, so the answer has to arrive as an ordinary web page: no login, no app,
+  no account.
+
+  It is one self-contained file on purpose — no framework, no build step, no
+  CDN request that could be blocked or disappear. Drop it on any static host
+  (see ../README.md) and it works. It reads the certificate code from the URL
+  and asks the public verification endpoint, which is open precisely so that
+  checks do not depend on having an account.
+
+  Accepted URL shapes, in order of preference:
+    …/verify/?id=<certificate id or registration number>
+    …/verify/<certificate id>          (hosts that rewrite unknown paths here)
+    …/verify/#<certificate id>
+-->
+
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#f4f6fb; --card:#fff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
+  --navy:#0f2d52; --ok:#047857; --okbg:#ecfdf5; --bad:#b42318; --badbg:#fef3f2;
+  --warn:#b54708; --warnbg:#fffaeb; --link:#1d4ed8;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b1220; --card:#121a2b; --ink:#e8edf7; --muted:#9aa6bd; --line:#24314a;
+    --navy:#dbe6f7; --ok:#34d399; --okbg:#07251c; --bad:#fca5a5; --badbg:#2a1113;
+    --warn:#fcd34d; --warnbg:#2a1f07; --link:#93b4ff;
+  }
+}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:24px 16px 56px}
+.brand{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:22px}
+.brand svg{width:26px;height:26px;fill:var(--navy)}
+.brand b{font-size:17px;letter-spacing:-.2px;color:var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
+.banner{text-align:center;padding:28px 20px}
+.disc{width:72px;height:72px;border-radius:36px;display:inline-flex;align-items:center;
+  justify-content:center;margin-bottom:14px}
+.disc svg{width:40px;height:40px}
+.banner h1{margin:0 0 8px;font-size:22px;line-height:1.25;letter-spacing:-.3px}
+.banner p{margin:0;color:var(--muted);font-size:14.5px}
+.ok .disc{background:var(--okbg)} .ok .disc svg{fill:var(--ok)} .ok h1{color:var(--ok)}
+.bad .disc{background:var(--badbg)} .bad .disc svg{fill:var(--bad)} .bad h1{color:var(--bad)}
+.warn .disc{background:var(--warnbg)} .warn .disc svg{fill:var(--warn)} .warn h1{color:var(--warn)}
+h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);margin:0 0 14px}
+dl{margin:0;display:grid;grid-template-columns:1fr;gap:13px}
+@media(min-width:460px){dl{grid-template-columns:1fr 1fr}}
+dt{font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:2px}
+dd{margin:0;font-size:15.5px;font-weight:600}
+dd.name{font-size:19px;letter-spacing:-.2px}
+dd.plain{font-weight:500;color:var(--muted)}
+.full{grid-column:1/-1}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;
+  font-weight:500;word-break:break-all}
+a{color:var(--link)}
+.rev{background:var(--badbg);border-color:transparent}
+.rev h2{color:var(--bad)}
+.note{font-size:14px;color:var(--muted)}
+.note ul{margin:10px 0 0;padding-left:20px} .note li{margin-bottom:7px}
+.note b{color:var(--ink)}
+form{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+input{flex:1 1 200px;min-width:0;padding:12px 13px;font-size:16px;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);color:var(--ink)}
+button{padding:12px 20px;font-size:15px;font-weight:650;border:0;border-radius:10px;
+  background:var(--navy);color:#fff;cursor:pointer}
+@media (prefers-color-scheme:dark){button{color:#0b1220}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.spin{width:30px;height:30px;margin:28px auto;border:3px solid var(--line);
+  border-top-color:var(--navy);border-radius:50%;animation:s .8s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+footer{text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7;margin-top:26px}
+.centre{text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5.2v6.3c0 5 3.4 9.3 8 10.5 4.6-1.2 8-5.5 8-10.5V5.2L12 2Z"/></svg>
+    <b>TasdikiDocs</b>
+  </div>
+  <main id="main" aria-live="polite">
+    <div class="card"><div class="spin" role="status"><span class="sr">Checking…</span></div></div>
+  </main>
+  <noscript>
+    <div class="card note">
+      This verification page needs JavaScript to look the certificate up. Please enable it, or open the
+      certificate in the TasdikiDocs app.
+    </div>
+  </noscript>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // The public verification API. Open by design: an employer must be able to
+  // check a certificate without an account. Override at deploy time by setting
+  // window.TASDIKI_API before this script, or with ?api= while testing.
+  var DEFAULT_API = 'https://xakmdrwrsslnathxgeka.supabase.co/functions/v1/api';
+  var EXPLORER_TX = 'https://amoy.polygonscan.com/tx/';
+  var IPFS_GATEWAY = 'https://ipfs.io/ipfs/';
+
+  var SHIELD = 'M12 2 4 5.2v6.3c0 5 3.4 9.3 8 10.5 4.6-1.2 8-5.5 8-10.5V5.2L12 2Z';
+  var GLYPH = {
+    tick: ['m8.6 12.2 2.4 2.4 4.6-4.8', 2.1],
+    cross: ['m9 9 6 6m0-6-6 6', 2.1],
+    bang: ['M12 8.2v4.4m0 2.9v.1', 2.1]
+  };
+
+  var STATUS = {
+    valid: { tone: 'ok', glyph: 'tick', label: 'Certificate verified',
+      lead: 'This certificate is genuine and has not been revoked.' },
+    revoked: { tone: 'bad', glyph: 'cross', label: 'Certificate revoked',
+      lead: 'This certificate was issued by the institution but has since been withdrawn. Do not accept it as valid.' },
+    invalid: { tone: 'bad', glyph: 'cross', label: 'Certificate invalid',
+      lead: 'This certificate did not pass verification.' },
+    not_found: { tone: 'warn', glyph: 'bang', label: 'No record found',
+      lead: 'No certificate on TasdikiDocs matches this code. That does not by itself prove forgery — read the note below.' }
+  };
+
+  var main = document.getElementById('main');
+  var params = new URLSearchParams(location.search);
+  var api = (window.TASDIKI_API || params.get('api') || DEFAULT_API).replace(/\/+$/, '');
+
+  // ---- tiny DOM helpers (textContent only — never innerHTML with API data) --
+  function el(tag, attrs, kids) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        if (k === 'text') node.textContent = attrs[k];
+        else if (attrs[k] != null) node.setAttribute(k, attrs[k]);
+      });
+    }
+    (kids || []).forEach(function (kid) { if (kid) node.appendChild(kid); });
+    return node;
+  }
+
+  function svg(paths) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var root = document.createElementNS(ns, 'svg');
+    root.setAttribute('viewBox', '0 0 24 24');
+    root.setAttribute('aria-hidden', 'true');
+    paths.forEach(function (spec) {
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', spec.d);
+      if (spec.stroke) {
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#fff');
+        path.setAttribute('stroke-width', spec.stroke);
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+      }
+      root.appendChild(path);
+    });
+    return root;
+  }
+
+  function row(label, valueNode, full, cls) {
+    return el('div', { class: full ? 'full' : null }, [
+      el('dt', { text: label }),
+      valueNode.tagName === 'DD' ? valueNode : el('dd', { class: cls || null }, [valueNode])
+    ]);
+  }
+
+  function textRow(label, value, full, cls) {
+    return row(label, document.createTextNode(value), full, cls);
+  }
+
+  function codeRow(label, value, href, full) {
+    var code = el('code', { text: value });
+    var inner = href ? el('a', { href: href, rel: 'noopener nofollow noreferrer' }, [code]) : code;
+    return row(label, inner, full);
+  }
+
+  function card(kids, cls) { return el('div', { class: 'card' + (cls ? ' ' + cls : '') }, kids); }
+
+  function banner(status) {
+    var glyph = GLYPH[status.glyph];
+    return card([
+      el('span', { class: 'disc' }, [svg([{ d: SHIELD }, { d: glyph[0], stroke: glyph[1] }])]),
+      el('h1', { text: status.label }),
+      el('p', { text: status.lead })
+    ], 'banner ' + status.tone);
+  }
+
+  function dateOnly(value) {
+    if (!value) return '—';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  function searchCard(heading) {
+    var input = el('input', {
+      id: 'q', name: 'id', required: '', autocapitalize: 'off', autocorrect: 'off',
+      spellcheck: 'false', placeholder: 'Certificate ID or registration number'
+    });
+    // A GET form on the current path: the result gets its own URL, which is
+    // what people bookmark, screenshot and forward.
+    var form = el('form', { method: 'get', role: 'search' }, [
+      el('label', { for: 'q', class: 'sr', text: 'Certificate ID or registration number' }),
+      input,
+      el('button', { type: 'submit', text: 'Verify' })
+    ]);
+    return card([el('h2', { text: heading }), form]);
+  }
+
+  function footer() {
+    var when = new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    return el('footer', {}, [
+      el('span', { text: 'Checked ' + when + '.' }),
+      el('br'),
+      el('span', { text: "Verified against the issuing institution's record on TasdikiDocs, independently of the document presented to you." })
+    ]);
+  }
+
+  function show(nodes) {
+    main.textContent = '';
+    nodes.forEach(function (node) { if (node) main.appendChild(node); });
+  }
+
+  // ---- which certificate? --------------------------------------------------
+  function codeFromUrl() {
+    var q = params.get('id') || params.get('q');
+    if (q && q.trim()) return q.trim();
+    // Path style, for hosts that rewrite unknown paths to this file.
+    var m = location.pathname.match(/\/verify\/([^/]+)\/?$/);
+    if (m && !/\.html?$/i.test(m[1])) return decodeURIComponent(m[1]);
+    if (location.hash.length > 1) return decodeURIComponent(location.hash.slice(1));
+    return null;
+  }
+
+  // ---- screens -------------------------------------------------------------
+  function renderLanding() {
+    document.title = 'Verify a certificate | TasdikiDocs';
+    show([
+      card([
+        el('span', { class: 'disc' }, [svg([{ d: SHIELD }, { d: GLYPH.tick[0], stroke: GLYPH.tick[1] }])]),
+        el('h1', { text: 'Verify a certificate' }),
+        el('p', { text: 'Enter the certificate ID or registration number printed on the document. No account is needed.' })
+      ], 'banner ok'),
+      searchCard('Certificate code'),
+      card([el('p', { class: 'note', style: 'margin:0',
+        text: 'Most certificates also carry a QR code — scanning it with your phone camera opens this check automatically.' })])
+    ]);
+  }
+
+  function renderNotFound(code) {
+    document.title = 'No record found | TasdikiDocs';
+    var reasons = [
+      ['The issuing institution may not be on TasdikiDocs. ', 'Only certificates issued through the platform can be checked here; ask the institution directly if it is not a member.'],
+      ['The record may predate the institution joining. ', 'Institutions publish the date from which their records are complete, and anything earlier has to be confirmed with them.'],
+      ['The code may be mistyped. ', 'Certificate IDs are long — re-scan the QR code, or retype the registration number carefully.'],
+      ['Or the document may not be genuine. ', 'If the institution issues through TasdikiDocs and the date is covered, a missing record is a serious warning sign.']
+    ].map(function (pair) {
+      return el('li', {}, [el('b', { text: pair[0] }), document.createTextNode(pair[1])]);
+    });
+
+    show([
+      banner(STATUS.not_found),
+      card([el('h2', { text: 'What was checked' }), el('dl', {}, [codeRow('Code searched', code, null, true)])]),
+      card([
+        el('h2', { text: 'What this means' }),
+        el('ul', {}, reasons),
+        el('p', { style: 'margin-bottom:0',
+          text: 'A registered verifier can raise this with the institution inside the TasdikiDocs app and get a written answer.' })
+      ], 'note'),
+      searchCard('Try another code'),
+      footer()
+    ]);
+  }
+
+  function renderCertificate(result, cert) {
+    var status = STATUS[result] || STATUS.invalid;
+    document.title = (cert.status === 'revoked' ? 'Revoked: ' : 'Verified: ') + cert.student_name + ' | TasdikiDocs';
+
+    var details = card([
+      el('h2', { text: 'Certificate details' }),
+      el('dl', {}, [
+        textRow('Awarded to', cert.student_name, true, 'name'),
+        textRow('Qualification', cert.course_name, true),
+        textRow('Issued by', cert.institution_name || 'Unknown institution'),
+        textRow('Issue date', dateOnly(cert.issue_date)),
+        codeRow('Registration number', cert.registration_number),
+        textRow('Grade', cert.grade || 'Not stated')
+      ])
+    ]);
+
+    var revoked = cert.status === 'revoked'
+      ? card([
+          el('h2', { text: 'Revocation' }),
+          el('dl', {}, [
+            textRow('Revoked on', dateOnly(cert.revoked_at)),
+            textRow('Reason given', cert.revoked_reason || 'Not stated', true)
+          ])
+        ], 'rev')
+      : null;
+
+    var proof = [
+      codeRow('Certificate ID', cert.id, null, true),
+      codeRow('SHA-256 fingerprint', cert.certificate_hash, null, true),
+      cert.tx_hash
+        ? codeRow('Blockchain transaction', cert.tx_hash, EXPLORER_TX + cert.tx_hash, true)
+        : textRow('Blockchain transaction', 'Not yet anchored on-chain', true, 'plain')
+    ];
+    if (cert.ipfs_uri) {
+      var href = cert.ipfs_uri.indexOf('ipfs://') === 0
+        ? IPFS_GATEWAY + cert.ipfs_uri.slice(7)
+        : cert.ipfs_uri;
+      proof.push(codeRow('Stored record', cert.ipfs_uri, href, true));
+    }
+
+    var integrity = card([
+      el('h2', { text: 'Proof of integrity' }),
+      el('dl', {}, proof),
+      el('p', { class: 'note', style: 'margin:16px 0 0',
+        text: 'The fingerprint is computed from the record above when the certificate is issued and written to the Polygon blockchain, where it cannot be altered afterwards — so neither the institution nor this platform can change these details after the fact.' })
+    ]);
+
+    var app = card([
+      document.createTextNode('Have the app? '),
+      el('a', { href: 'tasdikidocs://verify/' + encodeURIComponent(cert.id), text: 'Open this certificate in TasdikiDocs' })
+    ], 'note centre');
+
+    show([banner(status), details, revoked, integrity, app, footer()]);
+  }
+
+  function renderError(code, message) {
+    document.title = 'Could not check | TasdikiDocs';
+    show([
+      card([
+        el('span', { class: 'disc' }, [svg([{ d: SHIELD }, { d: GLYPH.bang[0], stroke: GLYPH.bang[1] }])]),
+        el('h1', { text: 'Could not complete the check' }),
+        el('p', { text: message })
+      ], 'banner warn'),
+      card([el('h2', { text: 'What was checked' }), el('dl', {}, [codeRow('Code searched', code, null, true)])]),
+      card([el('p', { class: 'note', style: 'margin:0',
+        text: 'Nothing here says the certificate is invalid — the check itself did not finish. Reload the page, and if it keeps failing try again shortly.' })]),
+      el('div', { class: 'centre' }, [el('button', { type: 'button', id: 'retry', text: 'Try again' })])
+    ]);
+    var retry = document.getElementById('retry');
+    if (retry) retry.addEventListener('click', function () { lookup(code); });
+  }
+
+  // ---- the lookup ----------------------------------------------------------
+  function lookup(code) {
+    show([card([el('div', { class: 'spin', role: 'status' }, [el('span', { class: 'sr', text: 'Checking…' })])])]);
+
+    fetch(api + '/certificates/verify/' + encodeURIComponent(code), {
+      headers: { accept: 'application/json' },
+      cache: 'no-store'
+    })
+      .then(function (res) {
+        // The endpoint answers 200 for a match and 404 for none; both carry a
+        // JSON body, so only an unreadable body is a real failure.
+        return res.json().then(function (body) { return { ok: res.ok || res.status === 404, body: body }; });
+      })
+      .then(function (out) {
+        var body = out.body || {};
+        if (body.error && !body.result) throw new Error(body.error.message || 'Verification failed');
+        if (!body.certificate) renderNotFound(code);
+        else renderCertificate(body.result || body.certificate.status, body.certificate);
+      })
+      .catch(function (err) {
+        renderError(code, (err && err.message) ? err.message : 'The verification service could not be reached.');
+      });
+  }
+
+  var code = codeFromUrl();
+  if (code) lookup(code); else renderLanding();
+})();
+</script>
+</body>
+</html>
