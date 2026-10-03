@@ -381,12 +381,20 @@ footer{text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7;mar
       })
       .then(function (out) {
         var body = out.body || {};
-        if (body.error && !body.result) throw new Error(body.error.message || 'Verification failed');
+        if (body.error && !body.result) {
+          var apiError = new Error(body.error.message || 'The verification service rejected this request.');
+          apiError.fromApi = true;
+          throw apiError;
+        }
         if (!body.certificate) renderNotFound(code);
         else renderCertificate(body.result || body.certificate.status, body.certificate);
       })
       .catch(function (err) {
-        renderError(code, (err && err.message) ? err.message : 'The verification service could not be reached.');
+        // Only the API's own wording is worth showing; a raw fetch failure
+        // ("Failed to fetch") tells the reader nothing useful.
+        renderError(code, (err && err.fromApi && err.message)
+          ? err.message
+          : 'The verification service could not be reached. Check your internet connection and try again.');
       });
   }
 
